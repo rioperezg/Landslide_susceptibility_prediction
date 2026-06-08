@@ -1,0 +1,1 @@
+# Landslide_susceptibility_prediction

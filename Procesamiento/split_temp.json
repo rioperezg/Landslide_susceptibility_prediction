@@ -1,0 +1,6 @@
+{
+  "train": [
+    "italy_s2_3960_enriched.nc",
+    "italy_s2_3972_enriched.nc",
+    "italy_s2_4032_enriched.nc"]
+  }

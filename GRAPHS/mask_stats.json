@@ -1,0 +1,15 @@
+{
+  "lithology_class": {
+    "display_name": "lithology_class",
+    "n_mask0": 13603923,
+    "n_mask1": 76717,
+    "mean_mask0": 7.820462670951607,
+    "mean_mask1": 9.866991670685767,
+    "median_mask0": 6.0,
+    "median_mask1": 6.0,
+    "std_mask0": 5.872936397163839,
+    "std_mask1": 6.16513161924198,
+    "mannwhitney_u": 432114554637.5,
+    "p_value": 0.0
+  }
+}

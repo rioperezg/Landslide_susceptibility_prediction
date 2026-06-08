@@ -331,7 +331,7 @@ can be modified independently, making the framework suitable for future research
 
 The dataset used throughout this project is **not currently included in the repository**.
 
-The complete database occupies several hundreds of gigabytes due to the storage of multi-temporal satellite imagery, engineered variables and tensor representations.
+The complete database occupies around a hundred of gigabytes due to the storage of multi-temporal satellite imagery, engineered variables and tensor representations.
 
 Work is currently underway to prepare a public distribution strategy, either through compressed releases or external storage services.
 

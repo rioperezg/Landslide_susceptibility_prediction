@@ -1,0 +1,17 @@
+numpy
+pandas
+xarray
+netCDF4
+matplotlib
+cartopy
+geopandas
+fiona
+rasterio
+scipy
+scikit-learn
+torch
+tqdm
+pyyaml
+pyproj
+whitebox
+joblib

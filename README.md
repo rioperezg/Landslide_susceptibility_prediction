@@ -2,358 +2,387 @@
 
 ## Overview
 
-This repository contains the code developed for the Bachelor's Thesis focused on **landslide susceptibility prediction using deep learning techniques and multi-source geospatial data**.
+This repository contains the code developed for a Bachelor's Thesis on **landslide susceptibility prediction using deep learning and multi-source geospatial data**.
 
-The objective of the project is to study the capability of modern deep learning architectures to identify areas susceptible to landslides by combining temporal satellite imagery with static environmental variables.
+The objective is to study whether modern deep learning architectures can identify areas susceptible to landslides by combining **temporal satellite imagery** with **static and dynamic environmental variables**.
 
-Unlike traditional susceptibility mapping approaches, this work integrates **multi-temporal Sentinel imagery, topographic information, hydrological variables, lithology and precipitation products** into a unified spatio-temporal framework.
+Unlike traditional susceptibility mapping approaches that rely mostly on static predictors, this work integrates **multi-temporal Sentinel-1 SAR, Sentinel-2 optical data, topography, lithology, and precipitation** into a unified spatio-temporal framework for semantic segmentation.
 
-The repository includes the complete preprocessing, feature engineering, tensor generation, model training and evaluation pipeline.
+The repository includes:
+
+- A **reproducible preprocessing pipeline** (`main.py`) that converts aligned NetCDF patches into enriched PyTorch tensors
+- Feature engineering utilities for NetCDF and tensor data
+- Exploratory notebooks used during dataset design
+- Model training and evaluation experiments
 
 ---
 
-# Project Pipeline
+## Quick Start
 
-The complete workflow implemented in this repository is summarized below:
+### Prerequisites
 
-```
-Raw Geospatial Data
-        │
-        ▼
-Data Acquisition
-        │
-        ▼
-NetCDF Generation
-        │
-        ▼
-Feature Engineering
-        │
-        ▼
-Enriched NetCDF Files
-        │
-        ▼
-Tensor Conversion (.pt)
-        │
-        ▼
-Feature Selection
-        │
-        ▼
-Deep Learning Models
-        │
-        ▼
-Prediction
-        │
-        ▼
-Evaluation & Analysis
+- Python 3.10+
+- [WhiteboxTools](https://www.whiteboxgeo.com/manual/wbt_book/intro.html) installed and available on your system (required for DEM hydrology)
+- Sufficient disk space for intermediate artifacts and final tensor files
+
+### Installation
+
+```bash
+pip install -r requirements.txt
 ```
 
-The entire pipeline has been designed to facilitate experimentation with different variables, architectures and loss functions while maintaining reproducibility.
+### Input layout
+
+The pipeline expects aligned patch samples across three sensor variants:
+
+```
+matching_files/
+├── asc/          # Sentinel-1 ascending  (*.nc)
+├── dsc/          # Sentinel-1 descending  (*.nc)
+└── Sen2/         # Sentinel-2            (*.nc)
+```
+
+Each folder must contain the **same patch IDs** (e.g. `italy_s1asc_250.nc`, `italy_s1dsc_250.nc`, `italy_s2_250.nc`). The raw full dataset is not included in this repository (see [Dataset Availability](#dataset-availability)).
+
+### Run the pipeline
+
+From the repository root:
+
+```bash
+python main.py
+```
+
+Custom paths:
+
+```bash
+python main.py --input matching_files --output Enriched_files_pt --work-dir pipeline_artifacts
+```
+
+Run selected steps only:
+
+```bash
+python main.py --steps validate temporal dem_drainage nc_to_pt enrich_pt
+```
+
+### Output
+
+```
+Enriched_files_pt/
+├── asc/          # e.g. italy_s1asc_250_enriched.pt
+├── dsc/
+└── Sen2/
+```
+
+Intermediate logs and artifacts are written to `pipeline_artifacts/`.
 
 ---
 
-# Motivation
+## Project Pipeline
 
-Landslides constitute one of the most destructive natural hazards worldwide.
+The workflow has two stages: an **external patch extraction step** (outside this pipeline) and a **reproducible in-repo pipeline** driven by `main.py`.
 
-Although numerous susceptibility maps exist, many approaches rely exclusively on static variables and do not explicitly model the temporal evolution of environmental conditions.
+```
+External source database
+        │
+        ▼
+Patch extraction (manual / upstream)
+        │
+        ▼
+matching_files/  {asc, dsc, Sen2}
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│  python main.py                                   │
+│                                                   │
+│  1. validate      → common patch IDs              │
+│  2. temporal      → event dates, last 8 samples   │
+│  3. dem_drainage  → mosaic, flow acc, drainage    │
+│  4. nc_to_pt      → base tensor conversion        │
+│  5. enrich_pt     → derived variables on .pt      │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+Enriched_files_pt/  {asc, dsc, Sen2}
+        │
+        ▼
+Train / val / test splits  →  Deep learning models  →  Evaluation
+```
 
-This project explores whether incorporating temporal information from satellite observations can improve susceptibility estimation through deep learning.
+### Pipeline steps
+
+| Step | Description |
+|------|-------------|
+| **validate** | Checks that `asc`, `dsc`, and `Sen2` contain the same patch IDs |
+| **temporal** | Records dates per patch; keeps the 8 timestamps immediately before the landslide event (`date_event` or `event_date` attribute) |
+| **dem_drainage** | Exports patch DEMs, builds regional mosaics by sector, computes flow accumulation and area drainage, assigns `area_drainage` to each NetCDF patch |
+| **nc_to_pt** | Converts enriched NetCDF files to base PyTorch tensors with `variable_names` metadata |
+| **enrich_pt** | Adds derived topographic variables on tensors; for Sentinel-2 also computes NDVI and NBR |
 
 ---
 
-# Data Sources
+## Repository Structure
 
-The models combine information from multiple remote sensing products.
+```
+.
+├── main.py                          # Pipeline entry point
+├── requirements.txt
+├── config/
+│   ├── default_config.yaml          # Paths, variables, temporal window, DEM settings
+│   └── sectors_italy.json         # Regional sectors for DEM / hydrology
+├── pipeline/
+│   ├── runner.py                    # Orchestrates all steps
+│   ├── config.py
+│   └── steps/
+│       ├── validate.py
+│       ├── temporal.py
+│       ├── dem_drainage.py
+│       ├── nc_to_pt.py
+│       └── enrich_pt.py
+├── Procesamiento/
+│   ├── feature_functions.py         # NetCDF feature engineering (DEM, drainage, etc.)
+│   └── Machine_learn.ipynb          # Model training experiments (3D U-Net)
+├── Helpers_fase2/
+│   └── feature_functions_pt.py      # Tensor enrichment and dataset utilities
+├── Preprocesamiento/                # Exploratory / legacy notebook workflow
+├── Helpers_fase1/                   # Phase-1 zone selection and EDA helpers
+├── Confección_fase2.ipynb           # Legacy phase-2 dataset assembly notebook
+└── GRAPHS/                          # Precomputed analysis outputs (JSON)
+```
 
-## Sentinel-1 SAR
+**Notebooks** (`Preprocesamiento/`, `Confección_fase2.ipynb`) document the iterative research process used to design the dataset. The **reproducible path** for building `Enriched_files_pt` is `main.py`.
+
+---
+
+## Configuration
+
+### `config/default_config.yaml`
+
+Main settings:
+
+| Key | Purpose |
+|-----|---------|
+| `input_dir` | Input folder (`matching_files`) |
+| `output_dir` | Final tensor output (`Enriched_files_pt`) |
+| `work_dir` | Intermediate artifacts (`pipeline_artifacts`) |
+| `temporal.n_timesteps` | Number of pre-event timestamps to keep (default: 8) |
+| `dem.sectors_config` | Sector definitions for regional DEM processing |
+| `variables.sar` / `variables.sen2` | Dynamic, static, and final channel order per variant |
+
+### `config/sectors_italy.json`
+
+Defines geographic sectors used to build regional DEM mosaics and compute consistent flow accumulation / area drainage for the Italian study area. Edit this file if the spatial extent changes.
+
+### CLI overrides
+
+| Flag | Description |
+|------|-------------|
+| `--config` | Path to YAML config file |
+| `--input` | Override input directory |
+| `--output` | Override output directory |
+| `--work-dir` | Override intermediate artifacts directory |
+| `--steps` | Run only selected steps |
+| `--log-level` | Logging verbosity |
+
+---
+
+## Data Sources
+
+The models combine information from multiple remote sensing and environmental products.
+
+### Sentinel-1 SAR (`asc`, `dsc`)
 
 Temporal synthetic aperture radar observations.
 
-Typical variables include:
+- **Variables:** VV, VH
+- **Relevance:** surface roughness, moisture, vegetation structure
 
-* VV
-* VH
-
-These variables provide information about:
-
-* Surface roughness
-* Moisture conditions
-* Vegetation structure
-
----
-
-## Sentinel-2 Optical
+### Sentinel-2 Optical (`Sen2`)
 
 Multi-temporal optical observations.
 
-Common variables include:
+- **Variables:** B04, B05, B06, B07, B08, B11, B12 (plus derived NDVI, NBR)
+- **Relevance:** vegetation condition, burn severity, surface moisture
 
-* Red Edge bands
-* SWIR bands
+### Topographic Variables
 
-These bands contain valuable information related to vegetation condition and surface moisture.
+Derived from the Digital Elevation Model (DEM):
 
----
+- DEM, slope, aspect (sin/cos), profile curvature
+- Area drainage, LS factor, SPI, TWI
+- Distance to drainage
 
-## Topographic Variables
+These describe terrain morphology and hydrological behaviour. Topographic derivatives on tensors are computed in the `enrich_pt` step; `area_drainage` is computed from a **regional DEM mosaic** and assigned at the NetCDF stage.
 
-Derived from Digital Elevation Models (DEM):
+### Lithology
 
-* DEM
-* Slope
-* Aspect
-* Profile Curvature
-* Drainage Area
-* LS Factor
-* SPI
-* TWI
-* Distance to Drainage
+Geological information describing underlying rock and soil materials (`lithology_class`), included as a static categorical channel.
 
-These variables describe terrain morphology and hydrological behavior.
+### Precipitation
 
----
+Rainfall accumulation variables from external products:
 
-## Lithology
+- `prec7` — 7-day accumulation
+- `prec20` — 20-day accumulation
+- `max2d_7` — maximum 2-day accumulation within the previous week
 
-Geological information describing the underlying rock and soil materials.
-
-Lithology plays an important role in slope stability and landslide occurrence.
+These aim to capture rainfall-triggering mechanisms.
 
 ---
 
-## Precipitation
+## Dataset Construction
 
-Accumulated rainfall variables generated from external precipitation products.
+Each sample corresponds to a **spatial patch** shared across the three sensor variants.
 
-Examples include:
-
-* 7-day accumulation
-* 20-day accumulation
-* Maximum 2-day accumulation within the previous week
-
-These variables aim to capture triggering mechanisms associated with intense rainfall events.
-
----
-
-# Dataset Construction
-
-The preprocessing pipeline generates a unified dataset where each sample corresponds to a spatial patch.
-
-Input tensors follow the structure:
+### Tensor format
 
 ```
-x → (Channels, Time, Height, Width)
+x → (Channels, Time, Height, Width)    # Time = 8 pre-event timestamps
+y → (Height, Width)                    # Landslide mask (MASK)
 ```
 
-while target masks are stored independently:
+The mask is stored separately from the input tensor to avoid information leakage during supervised learning.
 
-```
-y → (Height, Width)
-```
+### Each `.pt` file stores
 
-This design prevents information leakage while maintaining compatibility with supervised learning.
+- `x` — input tensor
+- `y` — target mask
+- `patch_id` — patch identifier
+- `variable_names` — ordered list of channel names (supports dynamic feature selection at training time)
 
-Each tensor file stores:
+### Temporal selection
 
-* Input variables
-* Target mask
-* Patch identifier
-* Variable names
-* Metadata required for feature selection
+For each patch, the pipeline reads the landslide date from NetCDF attributes (`date_event` or `event_date`) and retains only the **8 timestamps immediately before** that date. Patches with fewer than 8 valid pre-event observations are discarded consistently across all three variants.
 
 ---
 
-# Feature Engineering
+## Feature Engineering
 
-Several preprocessing stages are implemented before training.
+### NetCDF stage (`dem_drainage`)
 
-These include:
+- Export per-patch DEM GeoTIFFs
+- Build regional DEM mosaics by sector
+- Compute filled DEM, flow direction, flow accumulation, and area drainage
+- Assign `area_drainage` to each patch
 
-* Variable normalization
-* Missing value handling
-* Temporal median imputation
-* Static variable replication across time
-* Tensor generation
-* Patch extraction
+Implemented in `Procesamiento/feature_functions.py` and orchestrated by `pipeline/steps/dem_drainage.py`.
 
-The modular design allows easy incorporation of additional variables.
+### Tensor stage (`enrich_pt`)
 
----
+Added to all variants:
 
-# Feature Selection
+- Slope, aspect, profile curvature
+- LS, SPI, TWI
+- Distance to drainage
 
-The framework supports dynamic feature selection during training.
+Added to Sentinel-2 only:
 
-Instead of regenerating datasets, subsets of variables can be selected directly from stored tensors.
+- NDVI, NBR
 
-This enables efficient experimentation with different combinations of:
+Implemented in `Helpers_fase2/feature_functions_pt.py`.
 
-* SAR variables
-* Optical variables
-* Topographic variables
-* Hydrological variables
-* Lithology
-* Precipitation
+### At training time
 
-without rebuilding the dataset.
+- Variable normalization
+- Static variable replication across time (handled during `nc_to_pt`)
+- Dynamic feature selection from stored `variable_names` without rebuilding the dataset
 
 ---
 
-# Available Architectures
+## Feature Selection
 
-The repository includes implementations and experiments with several deep learning architectures for spatio-temporal semantic segmentation.
+The framework supports **dynamic feature selection during training**. Because each tensor stores `variable_names`, subsets of channels can be selected directly from `.pt` files without regenerating the dataset.
 
-## 3D U-Net
+This enables efficient experimentation with combinations of:
 
-Baseline architecture based on 3D convolutions.
-
-Temporal information is processed jointly with spatial dimensions.
-
----
-
-## ConvGRU U-Net
-
-Hybrid architecture combining:
-
-* Spatial encoder
-* ConvGRU temporal module
-* Spatial decoder
-
-allowing explicit temporal modeling.
+- SAR variables
+- Optical variables
+- Topographic / hydrological variables
+- Lithology
+- Precipitation
 
 ---
 
-## ConvLSTM U-Net
-
-Extension of ConvGRU replacing recurrent units by ConvLSTM cells to improve long-term temporal memory.
-
----
-
-## U-TAE
-
-Temporal Attention Encoder architecture specifically designed for satellite image time series.
-
-Temporal attention mechanisms enable adaptive weighting of observations across time.
-
----
-
-# Loss Functions
-
-The framework supports different optimization strategies:
-
-* Cross Entropy Loss
-* Weighted Cross Entropy
-* BCEWithLogitsLoss
-* BCE + Dice Loss
-
-allowing experimentation under severe class imbalance conditions.
-
----
-
-# Training Pipeline
+## Model Training
 
 Training follows the standard PyTorch workflow:
 
 ```
-Dataset
-    │
-    ▼
-DataLoader
-    │
-    ▼
-Forward Pass
-    │
-    ▼
-Loss Computation
-    │
-    ▼
-Backpropagation
-    │
-    ▼
-Optimizer Step
+Dataset → DataLoader → Forward pass → Loss → Backpropagation → Optimizer step
 ```
 
-The modular implementation allows swapping architectures while keeping the remainder of the pipeline unchanged.
+### Implemented in this repository
+
+- **Simple 3D U-Net** — baseline spatio-temporal segmentation model (`Procesamiento/Machine_learn.ipynb`)
+
+### Described as part of the broader thesis framework
+
+The following architectures were explored or planned as extensions of the baseline:
+
+- **ConvGRU U-Net** — spatial encoder + ConvGRU temporal module + decoder
+- **ConvLSTM U-Net** — ConvLSTM-based temporal memory
+- **U-TAE** — Temporal Attention Encoder for satellite time series
+
+Refer to the thesis document and notebook experiments for details on which architectures were fully evaluated.
+
+### Loss functions
+
+Supported strategies include:
+
+- Cross Entropy
+- Weighted Cross Entropy
+- BCEWithLogitsLoss
+- BCE + Dice Loss
+
+These address severe class imbalance typical of landslide mapping.
 
 ---
 
-# Evaluation
+## Evaluation
 
-Models are evaluated using pixel-wise semantic segmentation metrics.
+Models are evaluated with pixel-wise semantic segmentation metrics:
 
-Typical metrics include:
-
-* Recall
-* Precision
-* F1-score
-* IoU
-* Loss evolution
-
-Different classification thresholds and class weighting strategies can also be explored.
+- Recall, Precision, F1-score, IoU
+- Loss evolution over epochs
+- Optional threshold and class-weighting analysis
 
 ---
 
-# Visualization
+## Dataset Availability
 
-The repository contains utilities for visualizing:
+The **full raw dataset is not included** in this repository. It occupies on the order of **100 GB** due to multi-temporal satellite imagery, engineered variables, and tensor representations.
 
-* Individual variables
-* Temporal evolution
-* Tensor channels
-* NetCDF variables
-* Lithology maps
-* Precipitation layers
-* Prediction masks
+However, preprocessing is **reproducible** given aligned input patches:
 
-These tools facilitate exploratory analysis and model interpretation.
+1. Place your extracted patches in `matching_files/{asc,dsc,Sen2}`
+2. Run `python main.py`
+3. Obtain `Enriched_files_pt/{asc,dsc,Sen2}`
+
+Work is underway to prepare a public distribution strategy (compressed releases or external storage). Once available, download instructions will be added.
 
 ---
 
-# Repository Philosophy
+## Motivation
 
-The project has been developed with modularity as a primary objective.
+Landslides are among the most destructive natural hazards worldwide. Many existing susceptibility maps rely exclusively on static variables and do not explicitly model the temporal evolution of environmental conditions before an event.
 
-Individual components such as:
-
-* datasets
-* preprocessing
-* feature selection
-* architectures
-* losses
-* evaluation
-* visualization
-
-can be modified independently, making the framework suitable for future research and experimentation.
+This project investigates whether incorporating **multi-temporal satellite observations** together with topography, lithology, and precipitation can improve landslide susceptibility estimation through deep learning.
 
 ---
 
-# Dataset Availability
+## Future Work
 
-The dataset used throughout this project is **not currently included in the repository**.
+Potential extensions include:
 
-The complete database occupies around a hundred of gigabytes due to the storage of multi-temporal satellite imagery, engineered variables and tensor representations.
-
-Work is currently underway to prepare a public distribution strategy, either through compressed releases or external storage services.
-
-Once available, detailed download instructions and preprocessing scripts will be provided to allow full reproduction of the experiments.
-
----
-
-# Future Work
-
-Potential future developments include:
-
-* Additional temporal attention architectures
-* Transformer-based models
-* Self-supervised pretraining
-* Multi-scale fusion
-* Multi-region generalization
-* Domain adaptation
-* Probabilistic susceptibility estimation
+- Additional temporal attention architectures (ConvGRU, ConvLSTM, U-TAE)
+- Transformer-based models
+- Self-supervised pretraining on satellite time series
+- Multi-scale fusion and multi-region generalization
+- Domain adaptation across geographic areas
+- Probabilistic susceptibility estimation
 
 ---
 
-# Author
+## Author
 
 Developed as part of a Bachelor's Thesis on deep learning for landslide susceptibility prediction.
 

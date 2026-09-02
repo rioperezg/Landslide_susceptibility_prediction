@@ -10,10 +10,10 @@ Unlike traditional susceptibility mapping approaches that rely mostly on static 
 
 The repository includes:
 
-- A **reproducible preprocessing pipeline** (`main.py`) that converts aligned NetCDF patches into enriched PyTorch tensors
+- A **reproducible data-preparation pipeline** (`main.py` → `pipeline_datapreparation/`) that converts aligned NetCDF patches into enriched PyTorch tensors
+- A **reproducible training pipeline** (`train.py` → `pipeline_training/`) that trains and evaluates deep learning models on `.pt` files
 - Feature engineering utilities for NetCDF and tensor data
-- Exploratory notebooks used during dataset design
-- Model training and evaluation experiments
+- Exploratory Colab notebooks used during dataset design and raw model experiments (`Landslide_susceptibility_prediction-main/Procesamiento/`)
 
 ---
 
@@ -44,7 +44,7 @@ matching_files/
 
 Each folder must contain the **same patch IDs** (e.g. `italy_s1asc_250.nc`, `italy_s1dsc_250.nc`, `italy_s2_250.nc`). The raw full dataset is not included in this repository (see [Dataset Availability](#dataset-availability)).
 
-### Run the pipeline
+### Run the data-preparation pipeline
 
 From the repository root:
 
@@ -64,6 +64,38 @@ Run selected steps only:
 python main.py --steps validate temporal dem_drainage nc_to_pt enrich_pt
 ```
 
+### Run the training pipeline
+
+Once `Enriched_files_pt/` is available, train a model from the repository root:
+
+```bash
+python train.py
+```
+
+Select architecture:
+
+```bash
+python train.py --model unet3d
+python train.py --model utae
+python train.py --model convgru
+python train.py --model fcn_crnn
+```
+
+Run selected steps only:
+
+```bash
+python train.py --steps compute_stats train
+python train.py --steps evaluate
+```
+
+Custom paths:
+
+```bash
+python train.py --data-dir Enriched_files_pt/asc --output-dir training_artifacts/unet3d_asc
+```
+
+Training configuration lives in `config/training_config.yaml` (data paths, feature selection, hyperparameters, model-specific settings). Checkpoints and metrics are written to the configured `output_dir`.
+
 ### Output
 
 ```
@@ -75,11 +107,13 @@ Enriched_files_pt/
 
 Intermediate logs and artifacts are written to `pipeline_artifacts/`.
 
+Training artifacts (checkpoints, normalization stats, metrics) are written to `training_artifacts/` by default.
+
 ---
 
 ## Project Pipeline
 
-The workflow has two stages: an **external patch extraction step** (outside this pipeline) and a **reproducible in-repo pipeline** driven by `main.py`.
+The workflow has three layers: an **external patch extraction step**, a **reproducible data-preparation pipeline**, and a **reproducible training pipeline**.
 
 ```
 External source database
@@ -92,7 +126,7 @@ matching_files/  {asc, dsc, Sen2}
         │
         ▼
 ┌───────────────────────────────────────────────────┐
-│  python main.py                                   │
+│  python main.py  (pipeline_datapreparation)       │
 │                                                   │
 │  1. validate      → common patch IDs              │
 │  2. temporal      → event dates, last 8 samples   │
@@ -105,10 +139,19 @@ matching_files/  {asc, dsc, Sen2}
 Enriched_files_pt/  {asc, dsc, Sen2}
         │
         ▼
-Train / val / test splits  →  Deep learning models  →  Evaluation
+┌───────────────────────────────────────────────────┐
+│  python train.py  (pipeline_training)             │
+│                                                   │
+│  1. compute_stats → channel mean/std (train)      │
+│  2. train         → fit model, save checkpoint    │
+│  3. evaluate      → F1, IoU, threshold search     │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+training_artifacts/  (checkpoints, metrics)
 ```
 
-### Pipeline steps
+### Data-preparation steps
 
 | Step | Description |
 |------|-------------|
@@ -118,19 +161,29 @@ Train / val / test splits  →  Deep learning models  →  Evaluation
 | **nc_to_pt** | Converts enriched NetCDF files to base PyTorch tensors with `variable_names` metadata |
 | **enrich_pt** | Adds derived topographic variables on tensors; for Sentinel-2 also computes NDVI and NBR |
 
+### Training steps
+
+| Step | Description |
+|------|-------------|
+| **compute_stats** | Computes per-channel mean and std on the training split for normalization |
+| **train** | Trains the selected model; saves the best checkpoint (weights, mean, std, feature list) |
+| **evaluate** | Runs pixel-wise evaluation with threshold search (Precision, Recall, F1, IoU) |
+
 ---
 
 ## Repository Structure
 
 ```
 .
-├── main.py                          # Pipeline entry point
+├── main.py                          # Data-preparation entry point
+├── train.py                         # Training / evaluation entry point
 ├── requirements.txt
 ├── config/
-│   ├── default_config.yaml          # Paths, variables, temporal window, DEM settings
-│   └── sectors_italy.json         # Regional sectors for DEM / hydrology
-├── pipeline/
-│   ├── runner.py                    # Orchestrates all steps
+│   ├── default_config.yaml          # Data-prep paths, variables, DEM settings
+│   ├── training_config.yaml         # Training paths, model, hyperparameters
+│   └── sectors_italy.json           # Regional sectors for DEM / hydrology
+├── pipeline_datapreparation/        # Reproducible NetCDF → .pt pipeline
+│   ├── runner.py
 │   ├── config.py
 │   └── steps/
 │       ├── validate.py
@@ -138,24 +191,42 @@ Train / val / test splits  →  Deep learning models  →  Evaluation
 │       ├── dem_drainage.py
 │       ├── nc_to_pt.py
 │       └── enrich_pt.py
-├── Procesamiento/
-│   ├── feature_functions.py         # NetCDF feature engineering (DEM, drainage, etc.)
-│   └── Machine_learn.ipynb          # Model training experiments (3D U-Net)
-├── Helpers_fase2/
-│   └── feature_functions_pt.py      # Tensor enrichment and dataset utilities
-├── Preprocesamiento/                # Exploratory / legacy notebook workflow
-├── Helpers_fase1/                   # Phase-1 zone selection and EDA helpers
-├── Confección_fase2.ipynb           # Legacy phase-2 dataset assembly notebook
-└── GRAPHS/                          # Precomputed analysis outputs (JSON)
+├── pipeline_training/               # Reproducible .pt → model pipeline
+│   ├── runner.py
+│   ├── config.py
+│   ├── dataset.py
+│   ├── losses.py
+│   ├── metrics.py
+│   ├── models/                      # Sen12Landslides architectures + wrappers
+│   │   ├── unet3d.py
+│   │   ├── utae.py
+│   │   ├── convgru.py
+│   │   ├── fcn_crnn.py
+│   │   ├── wrappers.py
+│   │   └── factory.py
+│   └── steps/
+│       ├── compute_stats.py
+│       ├── train.py
+│       └── evaluate.py
+└── Landslide_susceptibility_prediction-main/
+    ├── Procesamiento/               # Raw Colab research notebooks
+    │   ├── U_NET.ipynb
+    │   ├── U_GRU.ipynb
+    │   ├── C_LSTM.ipynb
+    │   ├── U_TAE.ipynb
+    │   └── split_*.json             # Train/val/test patch IDs
+    ├── Preprocesamiento/            # Exploratory dataset design
+    ├── Helpers_fase1/
+    └── Helpers_fase2/
 ```
 
-**Notebooks** (`Preprocesamiento/`, `Confección_fase2.ipynb`) document the iterative research process used to design the dataset. The **reproducible path** for building `Enriched_files_pt` is `main.py`.
+**Notebooks** under `Landslide_susceptibility_prediction-main/` document the iterative Colab research process (paths reference Google Drive; not intended for local re-run). The **reproducible paths** are `main.py` for `Enriched_files_pt/` and `train.py` for model training.
 
 ---
 
 ## Configuration
 
-### `config/default_config.yaml`
+### `config/default_config.yaml` (data preparation)
 
 Main settings:
 
@@ -168,11 +239,25 @@ Main settings:
 | `dem.sectors_config` | Sector definitions for regional DEM processing |
 | `variables.sar` / `variables.sen2` | Dynamic, static, and final channel order per variant |
 
+### `config/training_config.yaml` (model training)
+
+Main settings:
+
+| Key | Purpose |
+|-----|---------|
+| `data_dir` | Enriched `.pt` folder for one sensor variant (`Enriched_files_pt/asc`, etc.) |
+| `split_file` / `split_extra_file` | Train/val/test patch ID lists (JSON) |
+| `model` | Architecture: `unet3d`, `utae`, `convgru`, or `fcn_crnn` |
+| `selected_variables` | Channel subset loaded via `variable_names` metadata |
+| `training.*` | Batch size, epochs, learning rate, loss, class weights |
+| `model_params.*` | Architecture-specific settings (`img_res`, `hidden_dim`, etc.) |
+| `output_dir` | Checkpoints, normalization stats, and metrics |
+
 ### `config/sectors_italy.json`
 
 Defines geographic sectors used to build regional DEM mosaics and compute consistent flow accumulation / area drainage for the Italian study area. Edit this file if the spatial extent changes.
 
-### CLI overrides
+### CLI overrides (`main.py`)
 
 | Flag | Description |
 |------|-------------|
@@ -181,6 +266,17 @@ Defines geographic sectors used to build regional DEM mosaics and compute consis
 | `--output` | Override output directory |
 | `--work-dir` | Override intermediate artifacts directory |
 | `--steps` | Run only selected steps |
+| `--log-level` | Logging verbosity |
+
+### CLI overrides (`train.py`)
+
+| Flag | Description |
+|------|-------------|
+| `--config` | Path to training YAML config |
+| `--data-dir` | Override enriched tensor directory |
+| `--output-dir` | Override training artifacts directory |
+| `--model` | Override model (`unet3d`, `utae`, `convgru`, `fcn_crnn`) |
+| `--steps` | Run only selected steps (`compute_stats`, `train`, `evaluate`) |
 | `--log-level` | Logging verbosity |
 
 ---
@@ -264,7 +360,7 @@ For each patch, the pipeline reads the landslide date from NetCDF attributes (`d
 - Compute filled DEM, flow direction, flow accumulation, and area drainage
 - Assign `area_drainage` to each patch
 
-Implemented in `Procesamiento/feature_functions.py` and orchestrated by `pipeline/steps/dem_drainage.py`.
+Implemented in `Procesamiento/feature_functions.py` and orchestrated by `pipeline_datapreparation/steps/dem_drainage.py`.
 
 ### Tensor stage (`enrich_pt`)
 
@@ -310,19 +406,27 @@ Training follows the standard PyTorch workflow:
 Dataset → DataLoader → Forward pass → Loss → Backpropagation → Optimizer step
 ```
 
-### Implemented in this repository
+The reproducible entry point is `train.py`, which loads enriched `.pt` tensors, normalizes them, and trains one of four architectures. Model definitions are adapted from the [Sen12Landslides](https://github.com/PaulH97/Sen12Landslides) repository (satellite data source project), with thin wrappers to match this thesis tensor format.
 
-- **Simple 3D U-Net** — baseline spatio-temporal segmentation model (`Procesamiento/Machine_learn.ipynb`)
+### Implemented architectures (`pipeline_training/models/`)
 
-### Described as part of the broader thesis framework
+| Model | Source | Description |
+|-------|--------|-------------|
+| **UNet3D** | `unet3d.py` | 3D U-Net baseline for spatio-temporal segmentation |
+| **UTAE** | `utae.py` | U-TAE with temporal attention encoder |
+| **ConvGRU** | `convgru.py` | ConvGRU segmentation (`ConvGRU_Seg`) |
+| **FCN-CRNN** | `fcn_crnn.py` | U-Net encoder + ConvLSTM bottleneck (`FCN_CRNN`) |
 
-The following architectures were explored or planned as extensions of the baseline:
+Raw Colab experiments for each architecture are preserved in `Landslide_susceptibility_prediction-main/Procesamiento/` (`U_NET.ipynb`, `U_TAE.ipynb`, `U_GRU.ipynb`, `C_LSTM.ipynb`).
 
-- **ConvGRU U-Net** — spatial encoder + ConvGRU temporal module + decoder
-- **ConvLSTM U-Net** — ConvLSTM-based temporal memory
-- **U-TAE** — Temporal Attention Encoder for satellite time series
+### Input / output contract
 
-Refer to the thesis document and notebook experiments for details on which architectures were fully evaluated.
+All models share the Sen12Landslides interface:
+
+- **Input:** `[Batch, Time, Channels, Height, Width]` (8 pre-event timestamps)
+- **Output:** `[Batch, num_classes, Height, Width]` landslide segmentation logits
+
+The dataset adapter permutes stored tensors from `(C, T, H, W)` to `(T, C, H, W)` and supports dynamic feature selection via `variable_names`.
 
 ### Loss functions
 
@@ -341,9 +445,11 @@ These address severe class imbalance typical of landslide mapping.
 
 Models are evaluated with pixel-wise semantic segmentation metrics:
 
-- Recall, Precision, F1-score, IoU
-- Loss evolution over epochs
-- Optional threshold and class-weighting analysis
+- Recall, Precision, F1-score, IoU, Accuracy
+- Loss evolution over epochs (saved in `training_history.pt`)
+- Threshold search on validation split (saved in `metrics.json`)
+
+The `evaluate` step in `train.py` reproduces the threshold-analysis workflow from the Colab notebooks.
 
 ---
 
@@ -351,11 +457,11 @@ Models are evaluated with pixel-wise semantic segmentation metrics:
 
 The **full raw dataset is not included** in this repository. It occupies on the order of **100 GB** due to multi-temporal satellite imagery, engineered variables, and tensor representations.
 
-However, preprocessing is **reproducible** given aligned input patches:
+However, preprocessing and training are **reproducible** given aligned input patches and split JSON files:
 
 1. Place your extracted patches in `matching_files/{asc,dsc,Sen2}`
-2. Run `python main.py`
-3. Obtain `Enriched_files_pt/{asc,dsc,Sen2}`
+2. Run `python main.py` → obtain `Enriched_files_pt/{asc,dsc,Sen2}`
+3. Configure `config/training_config.yaml` and run `python train.py`
 
 Work is underway to prepare a public distribution strategy (compressed releases or external storage). Once available, download instructions will be added.
 
@@ -373,12 +479,12 @@ This project investigates whether incorporating **multi-temporal satellite obser
 
 Potential extensions include:
 
-- Additional temporal attention architectures (ConvGRU, ConvLSTM, U-TAE)
 - Transformer-based models
 - Self-supervised pretraining on satellite time series
 - Multi-scale fusion and multi-region generalization
 - Domain adaptation across geographic areas
 - Probabilistic susceptibility estimation
+- Per-variant training configs and automated experiment sweeps
 
 ---
 

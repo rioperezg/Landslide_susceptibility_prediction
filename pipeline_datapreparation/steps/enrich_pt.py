@@ -15,8 +15,8 @@ from Helpers_fase2.feature_functions_pt import (
     add_spi_to_pt_folder,
     add_twi_to_pt_folder,
 )
-from pipeline.config import PipelineConfig
-from pipeline.utils import list_pt_files, write_json
+from pipeline_datapreparation.config import PipelineConfig
+from pipeline_datapreparation.utils import list_pt_files, write_json
 
 logger = logging.getLogger(__name__)
 

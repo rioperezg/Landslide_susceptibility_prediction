@@ -8,8 +8,8 @@ import pandas as pd
 import xarray as xr
 
 from Procesamiento.feature_functions import add_patch_days_to_json, full_patch_id
-from pipeline.config import PipelineConfig
-from pipeline.utils import (
+from pipeline_datapreparation.config import PipelineConfig
+from pipeline_datapreparation.utils import (
     filter_files_by_numbers,
     list_nc_files,
     patch_number,

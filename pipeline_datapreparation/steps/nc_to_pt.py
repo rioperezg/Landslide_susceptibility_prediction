@@ -8,8 +8,8 @@ import torch
 from tqdm import tqdm
 
 from Helpers_fase2.feature_functions_pt import LandslideDataset
-from pipeline.config import PipelineConfig
-from pipeline.utils import list_nc_files, write_json
+from pipeline_datapreparation.config import PipelineConfig
+from pipeline_datapreparation.utils import list_nc_files, write_json
 
 logger = logging.getLogger(__name__)
 

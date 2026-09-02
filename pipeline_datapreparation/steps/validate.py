@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from pipeline.config import PipelineConfig
-from pipeline.utils import common_patch_numbers, list_nc_files, write_json
+from pipeline_datapreparation.config import PipelineConfig
+from pipeline_datapreparation.utils import common_patch_numbers, list_nc_files, write_json
 
 logger = logging.getLogger(__name__)
 

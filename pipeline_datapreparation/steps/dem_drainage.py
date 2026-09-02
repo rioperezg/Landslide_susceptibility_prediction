@@ -12,8 +12,8 @@ from Helpers_fase2.feature_functions_pt import (
     process_area_drainage_by_sectors,
     sector_bounds_from_lonlat,
 )
-from pipeline.config import PipelineConfig
-from pipeline.utils import write_json
+from pipeline_datapreparation.config import PipelineConfig
+from pipeline_datapreparation.utils import write_json
 
 logger = logging.getLogger(__name__)
 

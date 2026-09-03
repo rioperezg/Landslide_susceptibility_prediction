@@ -455,15 +455,16 @@ The `evaluate` step in `train.py` reproduces the threshold-analysis workflow fro
 
 ## Dataset Availability
 
-The **full raw dataset is not included** in this repository. It occupies on the order of **100 GB** due to multi-temporal satellite imagery, engineered variables, and tensor representations.
+The **full raw dataset is not included** in this repository. It occupies several dozen gigabytes due to multi-temporal satellite imagery, engineered variables, and tensor representations.
 
-However, preprocessing and training are **reproducible** given aligned input patches and split JSON files:
+However, it is available in huggingface: [Landslide dataset](https://huggingface.co/datasets/huggingGonzalo/Spatio-temporal_and_traditional_landslide_dataset)
+
+Preprocessing and training are **reproducible** given aligned input patches and split JSON files, which you can find in the hugging face and this github repositories respectively:
 
 1. Place your extracted patches in `matching_files/{asc,dsc,Sen2}`
 2. Run `python main.py` → obtain `Enriched_files_pt/{asc,dsc,Sen2}`
 3. Configure `config/training_config.yaml` and run `python train.py`
 
-Work is underway to prepare a public distribution strategy (compressed releases or external storage). Once available, download instructions will be added.
 
 ---
 
